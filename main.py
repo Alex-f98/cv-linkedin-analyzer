@@ -15,11 +15,11 @@ import sys
 
 from dotenv import load_dotenv
 
-import analyzer
-import ats_checker
-import cv_reader
-import job_fetcher
-import report_builder
+from core import analyzer
+from core import ats_checker
+from core import cv_reader
+from core import job_fetcher
+from core import report_builder
 
 
 def parsear_argumentos():
@@ -59,16 +59,16 @@ def main():
     args = parsear_argumentos()
 
     # 1. Leer el CV
-    print(f"Leyendo CV desde {args.cv}...")
+    print(f" Leyendo CV desde {args.cv}...")
     try:
         cv_texto = cv_reader.leer_cv(args.cv)
     except (FileNotFoundError, ValueError) as e:
-        print(f"Error leyendo el CV: {e}")
+        print(f"❌ Error leyendo el CV: {e}")
         sys.exit(1)
     print(f"   Texto extraído: {len(cv_texto)} caracteres.\n")
 
     # 2. Extraer perfil resumido con Groq (incluye términos de búsqueda por capas)
-    print("Analizando tu perfil con Groq...")
+    print(" Analizando tu perfil con Groq...")
     perfil_cv = analyzer.extraer_perfil(cv_texto)
 
     if args.search_term:
@@ -95,12 +95,12 @@ def main():
     )
 
     if not publicaciones:
-        print("No se encontraron publicaciones. Probá con otro --search-term, "
+        print(" No se encontraron publicaciones. Probá con otro --search-term, "
               "--location, --mode, o ampliá --hours-old.")
         sys.exit(1)
 
     # 4. Puntuar cada publicación + chequear riesgo ATS
-    print(f"\nAnalizando compatibilidad de {len(publicaciones)} publicaciones con Groq...")
+    print(f"\n Analizando compatibilidad de {len(publicaciones)} publicaciones con Groq...")
     resultados = []
     for i, pub in enumerate(publicaciones, start=1):
         print(f"   [{i}/{len(publicaciones)}] {pub['title']} — {pub['company']}")
@@ -114,14 +114,14 @@ def main():
                 "riesgo_ats": riesgo_ats,
             })
         except Exception as e:
-            print(f"      Se saltó esta publicación por un error: {e}")
+            print(f"        Se saltó esta publicación por un error: {e}")
 
     if not resultados:
-        print("Ninguna publicación pudo ser analizada.")
+        print(" Ninguna publicación pudo ser analizada.")
         sys.exit(1)
 
     # 5. Generar resumen general agregado
-    print("\nGenerando resumen general de la búsqueda...")
+    print("\n Generando resumen general de la búsqueda...")
     resumen = analyzer.generar_resumen_general(perfil_cv, resultados)
 
     # 6. Guardar reporte
@@ -129,13 +129,13 @@ def main():
         perfil_cv, resumen, resultados, args.output
     )
 
-    print(f"\nReporte generado:")
+    print(f"\n Reporte generado:")
     print(f"   Markdown: {ruta_md}")
     print(f"   HTML:     {ruta_html}")
-    print(f"\nEncaje general: {resumen.get('encaje_general')} "
+    print(f"\n Encaje general: {resumen.get('encaje_general')} "
           f"(promedio {resumen.get('puntaje_promedio')}/100)")
     if resumen.get("ats_cobertura_promedio") is not None:
-        print(f"Cobertura ATS promedio: {resumen.get('ats_cobertura_promedio')}%")
+        print(f" Cobertura ATS promedio: {resumen.get('ats_cobertura_promedio')}%")
 
 
 if __name__ == "__main__":

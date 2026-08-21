@@ -5,3 +5,8 @@ cvs/
 __pycache__/
 *.pyc
 venv/
+.venv/
+output/*.md
+output/*.html
+.DS_Store
+ 

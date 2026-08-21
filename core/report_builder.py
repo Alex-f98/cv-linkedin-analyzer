@@ -1,10 +1,13 @@
 """
 report_builder.py
-Genera el reporte final (Markdown y HTML) con el resumen general
+Genera el reporte final (Markdown, HTML y PDF) con el resumen general
 y el ranking de publicaciones ordenado por puntaje de compatibilidad.
+Sin iconografía decorativa: los estados se comunican con texto y color.
 """
 
 import html
+import os
+import re
 from datetime import datetime
 
 
@@ -18,7 +21,7 @@ def _bloque_resumen_md(perfil_cv: dict, resumen: dict) -> str:
     bloque_ats = ""
     if ats_promedio is not None:
         bloque_ats = f"""
-**Cobertura ATS promedio:** {ats_promedio}% (probabilidad de pasar el primer filtro automático)
+**Cobertura ATS promedio:** {ats_promedio}% (probabilidad estimada de pasar el primer filtro automático)
 **Keywords ATS que más faltan en general:** {ats_faltantes if ats_faltantes else 'Ninguna recurrente'}
 """
 
@@ -43,20 +46,6 @@ def _bloque_resumen_md(perfil_cv: dict, resumen: dict) -> str:
 """
 
 
-_ICONO_RECOMENDACION = {
-    "Aplicar": "[OK]",
-    "Aplicar con reservas": "[RESERVA]",
-    "No priorizar": "[NO]",
-}
-
-_ICONO_ATS = {
-    "Bajo riesgo": "[BAJO]",
-    "Riesgo medio": "[MEDIO]",
-    "Alto riesgo": "[ALTO]",
-    "Sin datos": "[N/D]",
-}
-
-
 def _bloque_posteo_md(resultado: dict, posicion: int) -> str:
     pub = resultado["publicacion"]
     an = resultado["analisis"]
@@ -71,24 +60,22 @@ def _bloque_posteo_md(resultado: dict, posicion: int) -> str:
     )
 
     recomendacion = an.get("recomendacion", "")
-    icono = _ICONO_RECOMENDACION.get(recomendacion, "")
 
     ats_cobertura = ats.get("cobertura")
     ats_nivel = ats.get("nivel", "Sin datos")
-    ats_icono = _ICONO_ATS.get(ats_nivel, "")
     ats_encontradas = ", ".join(ats.get("encontradas", [])) or "Ninguna"
     ats_faltantes_pub = ", ".join(ats.get("faltantes", [])) or "Ninguna"
     ats_texto_cobertura = f"{ats_cobertura}%" if ats_cobertura is not None else "N/D"
 
-    return f"""### {posicion}. {pub['title']} — {pub['company']}  `{an['puntaje']}/100`  {icono} {recomendacion}
+    return f"""### {posicion}. {pub['title']} — {pub['company']}  `{an['puntaje']}/100`  · {recomendacion}
 
 - **Ubicación:** {pub['location']}
 - **Link:** [{pub['job_url']}]({pub['job_url']})
 - **Motivo del puntaje:** {an.get('motivo', '')}
 
-**Riesgo ATS:** {ats_icono} {ats_nivel} ({ats_texto_cobertura} de keywords literales encontradas)
+**Riesgo ATS:** {ats_nivel} ({ats_texto_cobertura} de keywords literales encontradas)
   - Encontradas: {ats_encontradas}
-  - NO encontradas (aunque tengas la experiencia, revisá si conviene agregarlas tal cual): {ats_faltantes_pub}
+  - No encontradas (aunque tengas la experiencia, revisá si conviene agregarlas tal cual): {ats_faltantes_pub}
 
 **Match:**
 {match if match else '  - No se detectaron coincidencias claras'}
@@ -113,7 +100,7 @@ def _bloque_posteo_md(resultado: dict, posicion: int) -> str:
 
 
 def construir_markdown(perfil_cv: dict, resumen: dict, resultados: list[dict]) -> str:
-    """Arma el reporte en Markdown."""
+    """Arma el reporte completo en Markdown."""
     resultados_ordenados = sorted(
         resultados, key=lambda r: r["analisis"]["puntaje"], reverse=True
     )
@@ -130,7 +117,7 @@ def construir_markdown(perfil_cv: dict, resumen: dict, resultados: list[dict]) -
 
 
 def _markdown_a_html_basico(md_texto: str) -> str:
-    """Conversión de Markdown a HTML."""
+    """Conversión simple de Markdown a HTML (sin dependencias externas)."""
     lineas = md_texto.split("\n")
     html_lineas = []
     en_lista = False
@@ -175,9 +162,7 @@ def _markdown_a_html_basico(md_texto: str) -> str:
 
 
 def _inline_md(texto: str) -> str:
-    """Maneja negritas, links y code inline."""
-    import re
-
+    """Maneja negritas, links, y code inline dentro de una línea, escapando el resto."""
     partes = []
     resto = texto
     patron = re.compile(r"(\*\*(.+?)\*\*|`(.+?)`|\[(.+?)\]\((.+?)\))")
@@ -191,15 +176,38 @@ def _inline_md(texto: str) -> str:
             partes.append(f"<code>{html.escape(m.group(3))}</code>")
         elif m.group(4) is not None:
             texto_link, url = m.group(4), m.group(5)
-            partes.append(f'<a href="{html.escape(url)}" target="_blank">{html.escape(texto_link)}</a>')
+            partes.append(f'<a href="{html.escape(url)}">{html.escape(texto_link)}</a>')
         ultimo = m.end()
     partes.append(html.escape(resto[ultimo:]))
 
     return "".join(partes)
 
 
+# Paleta y tipografía consistentes con la app de Streamlit (ver app/streamlit_app.py).
+_ESTILOS_REPORTE = """
+  body { font-family: 'Inter', -apple-system, Segoe UI, Roboto, sans-serif; max-width: 850px;
+          margin: 40px auto; padding: 0 24px; line-height: 1.65; color: #18181B;
+          background: #FAFAFA; }
+  h1, h2, h3 { font-family: 'Space Grotesk', 'Inter', sans-serif; font-weight: 600; }
+  h1 { border-bottom: 2px solid #4F46E5; padding-bottom: 12px; letter-spacing: -0.02em; }
+  h2 { color: #4F46E5; margin-top: 40px; font-size: 1.3rem; }
+  h3 { margin-top: 32px; background: #FFFFFF; border: 1px solid #E5E5EA;
+       padding: 12px 16px; border-radius: 8px; }
+  a { color: #4F46E5; text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  blockquote { background: #FFFFFF; border-left: 3px solid #4F46E5; margin: 12px 0;
+               padding: 12px 16px; color: #3F3F46; border-radius: 0 6px 6px 0; }
+  hr { border: none; border-top: 1px solid #E5E5EA; margin: 32px 0; }
+  code { font-family: 'JetBrains Mono', 'Courier New', monospace; background: #F4F4F5;
+         padding: 2px 6px; border-radius: 4px; font-size: 0.9em; color: #4F46E5; }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  strong { color: #18181B; }
+"""
+
+
 def construir_html(perfil_cv: dict, resumen: dict, resultados: list[dict]) -> str:
-    """Arma el reporte en HTML."""
+    """Arma el reporte completo en HTML con estilos propios, a partir del Markdown."""
     cuerpo_md = construir_markdown(perfil_cv, resumen, resultados)
     cuerpo_html = _markdown_a_html_basico(cuerpo_md)
 
@@ -209,19 +217,7 @@ def construir_html(perfil_cv: dict, resumen: dict, resultados: list[dict]) -> st
 <meta charset="UTF-8">
 <title>Reporte de compatibilidad CV vs. LinkedIn</title>
 <style>
-  body {{ font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 850px;
-          margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #1a1a1a; }}
-  h1 {{ border-bottom: 3px solid #0a66c2; padding-bottom: 10px; }}
-  h2 {{ color: #0a66c2; margin-top: 40px; }}
-  h3 {{ margin-top: 30px; background: #f3f6f8; padding: 10px 14px; border-radius: 6px; }}
-  a {{ color: #0a66c2; text-decoration: none; }}
-  a:hover {{ text-decoration: underline; }}
-  blockquote {{ background: #f9f9f9; border-left: 4px solid #0a66c2; margin: 10px 0;
-                 padding: 10px 16px; font-style: italic; }}
-  hr {{ border: none; border-top: 1px solid #ddd; margin: 30px 0; }}
-  code {{ background: #eef1f4; padding: 2px 6px; border-radius: 4px; }}
-  ul {{ margin: 8px 0; }}
-  h3 {{ display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }}
+{_ESTILOS_REPORTE}
 </style>
 </head>
 <body>
@@ -231,15 +227,34 @@ def construir_html(perfil_cv: dict, resumen: dict, resultados: list[dict]) -> st
 """
 
 
+def construir_pdf(perfil_cv: dict, resumen: dict, resultados: list[dict]) -> bytes:
+    """
+    Convierte el reporte HTML a PDF usando xhtml2pdf (pura Python, sin binarios
+    del sistema, apto para Streamlit Community Cloud).
+
+    Returns:
+        Contenido del PDF como bytes, listo para st.download_button.
+    """
+    from io import BytesIO
+    from xhtml2pdf import pisa
+
+    html_contenido = construir_html(perfil_cv, resumen, resultados)
+    buffer = BytesIO()
+    resultado = pisa.CreatePDF(src=html_contenido, dest=buffer, encoding="utf-8")
+
+    if resultado.err:
+        raise RuntimeError("No se pudo generar el PDF a partir del reporte HTML.")
+
+    return buffer.getvalue()
+
+
 def guardar_reporte(perfil_cv: dict, resumen: dict, resultados: list[dict], carpeta_salida: str) -> tuple[str, str]:
     """
-    Genera y guarda el reporte en Markdown y HTML.
+    Genera y guarda el reporte en Markdown y HTML (uso desde CLI).
 
     Returns:
         Tupla (ruta_md, ruta_html) con las rutas de los archivos generados.
     """
-    import os
-
     os.makedirs(carpeta_salida, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
 

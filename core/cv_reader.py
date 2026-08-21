@@ -1,36 +1,39 @@
 """
 cv_reader.py
-Extrae el texto plano de un CV en formato PDF.
+Extrae el texto plano de un CV en formato PDF. Acepta tanto una ruta de archivo
+(uso desde CLI) como un objeto de archivo en memoria (uso desde Streamlit,
+sin necesidad de guardar el PDF en disco).
 """
 
 import sys
 import pdfplumber
 
 
-def leer_cv(ruta_pdf: str) -> str:
+def leer_cv(fuente) -> str:
     """
     Abre un PDF y devuelve todo su texto concatenado.
 
     Args:
-        ruta_pdf: ruta al archivo PDF del CV.
+        fuente: ruta (str) al archivo PDF, o un objeto tipo archivo en memoria
+                 (ej: el resultado de st.file_uploader en Streamlit).
 
     Returns:
         El texto extraído del PDF.
 
     Raises:
-        FileNotFoundError: si el archivo no existe.
+        FileNotFoundError: si la ruta no existe (solo aplica si `fuente` es un str).
         ValueError: si no se pudo extraer texto (ej: PDF escaneado sin OCR).
     """
     texto_paginas = []
 
     try:
-        with pdfplumber.open(ruta_pdf) as pdf:
+        with pdfplumber.open(fuente) as pdf:
             for pagina in pdf.pages:
                 texto = pagina.extract_text()
                 if texto:
                     texto_paginas.append(texto)
     except FileNotFoundError:
-        raise FileNotFoundError(f"No se encontró el archivo de CV: {ruta_pdf}")
+        raise FileNotFoundError(f"No se encontró el archivo de CV: {fuente}")
 
     texto_completo = "\n".join(texto_paginas).strip()
 

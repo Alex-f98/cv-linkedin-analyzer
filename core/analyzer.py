@@ -14,13 +14,28 @@ from groq import Groq
 
 MODEL = "openai/gpt-oss-120b"  # reemplazo oficial de llama-3.3-70b-versatile (deprecado 16 ago 2026)
 
+# Override en memoria de la API key (lo usa la app de Streamlit para que cada
+# usuario use la suya, sin depender de variables de entorno del servidor).
+_api_key_override: str | None = None
+
+
+def configurar_api_key(api_key: str | None) -> None:
+    """
+    Define una API key en memoria para esta sesión/proceso, con prioridad sobre
+    la variable de entorno GROQ_API_KEY. Pensado para apps multiusuario (Streamlit)
+    donde cada usuario pega su propia key en vez de compartir una del servidor.
+    """
+    global _api_key_override
+    _api_key_override = api_key
+
 
 def _cliente() -> Groq:
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = _api_key_override or os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "No se encontró GROQ_API_KEY. Creá un archivo .env con tu API key "
-            "(mirá .env.example) o exportala como variable de entorno."
+            "No se encontró una API key de Groq. Creá un archivo .env con tu API key "
+            "(mirá .env.example), exportala como variable de entorno, o configurala "
+            "en memoria con analyzer.configurar_api_key(tu_key)."
         )
     return Groq(api_key=api_key)
 
@@ -97,11 +112,11 @@ def _validar_perfil(perfil: dict) -> dict:
     """
     if "search_term_general" not in perfil:
         fallback = perfil.get("rol_ideal", "Data Scientist")
-        print(f"Aviso: Groq no devolvió 'search_term_general', uso '{fallback}' como fallback.")
+        print(f"⚠️  Aviso: Groq no devolvió 'search_term_general', uso '{fallback}' como fallback.")
         perfil["search_term_general"] = fallback
 
     if "search_terms_especificos" not in perfil:
-        print("Aviso: Groq no devolvió 'search_terms_especificos', se busca solo con el término general.")
+        print("⚠️  Aviso: Groq no devolvió 'search_terms_especificos', se busca solo con el término general.")
         perfil["search_terms_especificos"] = []
 
     perfil.setdefault("rol_ideal", perfil["search_term_general"])
@@ -150,14 +165,14 @@ def extraer_keywords_ats(publicacion: dict) -> list[str]:
     keywords = resultado.get("keywords_ats", [])
 
     if not keywords:
-        print(f"      Aviso: Groq no devolvió keywords ATS para '{publicacion['title']}', "
+        print(f"      ⚠️  Aviso: Groq no devolvió keywords ATS para '{publicacion['title']}', "
               f"se omite el chequeo de riesgo ATS para este posteo.")
 
     return keywords
 
 
 def _calcular_recomendacion(puntaje: float) -> str:
-    """Recomendación según el puntaje."""
+    """Recomendación determinística en base al puntaje (mismo umbral siempre)."""
     if puntaje >= 75:
         return "Aplicar"
     elif puntaje >= 55:

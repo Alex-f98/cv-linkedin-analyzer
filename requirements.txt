@@ -2,3 +2,5 @@ groq>=0.11.0
 python-jobspy>=1.1.75
 pdfplumber>=0.11.0
 python-dotenv>=1.0.0
+streamlit>=1.38.0
+xhtml2pdf>=0.2.16
