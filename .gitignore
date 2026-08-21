@@ -1,6 +1,7 @@
 output/
 cvs/
 .env
+.env*
 __pycache__/
 *.pyc
-
+venv/
